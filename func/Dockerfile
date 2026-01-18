@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2.0 AS apply-setters
-FROM ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.1.1 AS apply-setters-v1
-FROM ghcr.io/kptdev/krm-functions-catalog/ensure-name-substring:v0.1.1 AS ensure-name-substring
-FROM ghcr.io/kptdev/krm-functions-catalog/search-replace:v0.2.0 AS search-replace
-FROM ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.4 AS set-annotations
+FROM ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2 AS apply-setters
+FROM ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2 AS apply-setters-v1
+FROM ghcr.io/kptdev/krm-functions-catalog/ensure-name-substring:v0.2 AS ensure-name-substring
+FROM ghcr.io/kptdev/krm-functions-catalog/search-replace:v0.2 AS search-replace
+FROM ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.5 AS set-annotations
 FROM ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.2 AS set-image
-FROM ghcr.io/kptdev/krm-functions-catalog/set-labels:v0.1.5 AS set-labels
-FROM ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.2.0 AS set-namespace
-FROM ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.3.4 AS set-namespace-v3
-FROM ghcr.io/kptdev/krm-functions-catalog/set-project-id:v0.2.0 AS set-project-id
-FROM ghcr.io/kptdev/krm-functions-catalog/starlark:v0.3.0 AS starlark
-FROM ghcr.io/kptdev/krm-functions-catalog/upsert-resource:v0.2.0 AS upsert-resource
+FROM ghcr.io/kptdev/krm-functions-catalog/set-labels:v0.2 AS set-labels
+FROM ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4 AS set-namespace
+FROM ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4 AS set-namespace-v3
+FROM ghcr.io/kptdev/krm-functions-catalog/set-project-id:v0.2.1 AS set-project-id
+FROM ghcr.io/kptdev/krm-functions-catalog/starlark:v0.5 AS starlark
+FROM ghcr.io/kptdev/krm-functions-catalog/upsert-resource:v0.2 AS upsert-resource
 
 FROM golang:1.25.0-alpine AS builder
 WORKDIR /go/src
@@ -47,7 +47,7 @@ COPY --from=set-labels             /usr/local/bin/function /functions/set-labels
 COPY --from=set-namespace          /usr/local/bin/function /functions/set-namespace
 COPY --from=set-namespace-v3       /usr/local/bin/function /functions/set-namespace-v3
 COPY --from=set-project-id         /usr/local/bin/function /functions/set-project-id
-COPY --from=starlark               /usr/local/bin/star     /functions/starlark
+COPY --from=starlark               /usr/local/bin/function /functions/starlark
 COPY --from=upsert-resource        /usr/local/bin/function /functions/upsert-resource
 COPY --from=builder                /server /grpc-health-probe /config.yaml /
 

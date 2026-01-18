@@ -18,6 +18,10 @@ set -e # Exit on error
 set -u # Must predefine variables
 set -o pipefail # Check errors in piped commands
 
+STARLARK_IMG="ghcr.io/kptdev/krm-functions-catalog/starlark:v0.5"
+SEARCH_REPLACE_IMG="ghcr.io/kptdev/krm-functions-catalog/search-replace:v0.2"
+PORCH_CACHE_TYPE="CR"
+
 function error() {
   cat <<EOF
 Error: ${1}
@@ -38,7 +42,14 @@ EOF
 DESTINATION=""
 IMAGE_REPO=""
 IMAGE_TAG=""
-ENABLED_RECONCILERS=""
+ENABLED_RECONCILERS="packagevariants,packagevariantsets"
+SERVER_IMAGE="ghcr.io/nxmatic/porch-server:v1.5.5"
+CONTROLLERS_IMAGE="ghcr.io/nxmatic/porch-controllers:v1.5.5"
+FUNCTION_IMAGE="ghcr.io/nxmatic/porch-function-runner:v1.5.5"
+WRAPPER_SERVER_IMAGE="ghcr.io/nxmatic/porch-wrapper-server:v1.5.5"
+TEST_GIT_SERVER_IMAGE="ghcr.io/nxmatic/test-git-server:v1.5.5"
+KIND_CONTEXT_NAME="kind"
+SKIP_KIND_LOAD="true"
 
 while [[ $# -gt 0 ]]; do
   key="${1}"
@@ -83,6 +94,11 @@ while [[ $# -gt 0 ]]; do
       shift 2
     ;;
 
+    --skip-kind-load)
+      SKIP_KIND_LOAD="${2}"
+      shift 2
+    ;;
+
     *)
       error "Invalid argument: ${key}"
     ;;
@@ -101,7 +117,7 @@ function validate() {
 
 
 function customize-pkg-images {
-	kpt fn eval "${DESTINATION}" --image ghcr.io/kptdev/krm-functions-catalog/search-replace:v0.2.0 -- by-value-regex="${1}" put-value="${2}"
+  kpt fn eval "${DESTINATION}" --image ${SEARCH_REPLACE_IMG} -- by-value-regex="${1}" put-value="${2}"
 }
 
 function deploy-gitea-dev-pkg {
@@ -112,9 +128,53 @@ function deploy-gitea-dev-pkg {
 }
 
 function deploy-porch-dev-pkg {
+  # Render the package locally (no live apply)
   kpt fn render ${DESTINATION}/porch
-  kpt live init ${DESTINATION}/porch
-  kpt live apply ${DESTINATION}/porch
+  echo "Rendered porch package to ${DESTINATION}/porch (live apply skipped)."
+}
+
+function configure-porch-cache-cr {
+  local pkg="${DESTINATION}/porch"
+
+  # Set ConfigMap cache type
+  kpt fn eval ${pkg} \
+    --image ${SEARCH_REPLACE_IMG} \
+    --match-kind ConfigMap \
+    --match-name porch-config \
+    --match-namespace porch-system \
+    -- by-path=data.cache-type put-value="${PORCH_CACHE_TYPE}"
+
+  # Remove postgres wiring and force CR cache args
+  kpt fn eval ${pkg} \
+    --image ${STARLARK_IMG} \
+    --match-kind Deployment \
+    --match-name porch-server \
+    --match-namespace porch-system \
+    -- "source=
+for resource in ctx.resource_list['items']:
+    podspec = resource['spec']['template']['spec']
+
+    # Remove wait-for-postgres initContainer
+    if 'initContainers' in podspec:
+        new_init = [c for c in podspec['initContainers'] if c.get('name') != 'wait-for-postgres']
+        if new_init:
+            podspec['initContainers'] = new_init
+        else:
+            podspec.pop('initContainers')
+
+    # Update containers
+    for container in podspec.get('containers', []):
+        if 'envFrom' in container:
+            container['envFrom'] = []
+
+        args = container.get('args', [])
+        for i, arg in enumerate(args):
+            if arg.startswith('--cache-type='):
+                args[i] = '--cache-type=cr'
+"
+
+  # Drop bundled postgres bits if present
+  rm -f ${pkg}/*porch-postgres*.yaml 2>/dev/null || true
 }
 
 function load-custom-images {
@@ -126,14 +186,18 @@ function load-custom-images {
 }
 
 function main() {
-  echo "Loading images into kind cluster ${KIND_CONTEXT_NAME}..."
-  load-custom-images
+  if [[ "${SKIP_KIND_LOAD}" != "true" ]]; then
+    echo "Loading images into kind cluster ${KIND_CONTEXT_NAME}..."
+    load-custom-images
+  else
+    echo "Skipping kind image load (generation-only mode)."
+  fi
 
   echo "Preparing porch kpt package in ${DESTINATION}..."
   rm -rf ${DESTINATION}/porch || true
   kpt pkg get https://github.com/nephio-project/catalog/tree/main/nephio/core/porch ${DESTINATION}
   kpt fn eval ${DESTINATION}/porch \
-    --image ghcr.io/kptdev/krm-functions-catalog/starlark:v0.5.0 \
+    --image ${STARLARK_IMG} \
     --match-kind Deployment \
     --match-name porch-controllers \
     --match-namespace porch-system \
@@ -146,23 +210,25 @@ for resource in ctx.resource_list["items"]:
     c["env"].append({"name": "ENABLE_" + r.upper(), "value": "true"})
 '
 
+  configure-porch-cache-cr
+
   customize-pkg-images \
-  "porch-server:v2.0.0" \
+  "docker.io/nephio/porch-server:(latest|v2\.0\.0)" \
   "${SERVER_IMAGE}"
 
   customize-pkg-images \
-  "porch-controllers:v2.0.0" \
+  "docker.io/nephio/porch-controllers:(latest|v2\.0\.0)" \
   "${CONTROLLERS_IMAGE}"
 
   customize-pkg-images \
-  "porch-function-runner:v2.0.0" \
+  "docker.io/nephio/porch-function-runner:(latest|v2\.0\.0)" \
   "${FUNCTION_IMAGE}"
 
   customize-pkg-images \
-  "porch-wrapper-server:v2.0.0" \
+  "docker.io/nephio/porch-wrapper-server:(latest|v2\.0\.0)" \
   "${WRAPPER_SERVER_IMAGE}"
 
-  echo "Deploying porch with newly built images..."
+  echo "Rendering porch package with newly built images (no live apply)..."
   deploy-porch-dev-pkg
 
   echo

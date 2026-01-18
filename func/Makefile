@@ -17,6 +17,7 @@ IMAGE_REPO ?= docker.io/nephio
 IMAGE_NAME ?= function-runner
 WRAPPER_SERVER_IMAGE_NAME ?= wrapper-server
 COMPILED_PROTO=evaluator/evaluator_grpc.pb.go evaluator/evaluator.pb.go
+PLATFORM_ARGS := $(if $(PLATFORMS),--platform $(PLATFORMS),)
 
 PORCHDIR = $(abspath $(CURDIR)/..)
 
@@ -32,10 +33,10 @@ $(COMPILED_PROTO): evaluator/evaluator.proto
 
 .PHONY: build-image docker-build
 build-image docker-build:
-	docker buildx build --load --tag $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) -f ./Dockerfile "$(PORCHDIR)"
-	docker buildx build --load --tag $(IMAGE_REPO)/$(WRAPPER_SERVER_IMAGE_NAME):$(IMAGE_TAG) -f ./Dockerfile-wrapperserver "$(PORCHDIR)"
+	docker buildx build $(PLATFORM_ARGS) --load --tag $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) -f ./Dockerfile "$(PORCHDIR)"
+	docker buildx build $(PLATFORM_ARGS) --load --tag $(IMAGE_REPO)/$(WRAPPER_SERVER_IMAGE_NAME):$(IMAGE_TAG) -f ./Dockerfile-wrapperserver "$(PORCHDIR)"
 
 .PHONY: push-image docker-push
 push-image docker-push:
-	docker buildx build --push --tag $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) -f ./Dockerfile "$(PORCHDIR)"
-	docker buildx build --push --tag $(IMAGE_REPO)/$(WRAPPER_SERVER_IMAGE_NAME):$(IMAGE_TAG) -f ./Dockerfile-wrapperserver "$(PORCHDIR)"
+	docker buildx build $(PLATFORM_ARGS) --push --tag $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) -f ./Dockerfile "$(PORCHDIR)"
+	docker buildx build $(PLATFORM_ARGS) --push --tag $(IMAGE_REPO)/$(WRAPPER_SERVER_IMAGE_NAME):$(IMAGE_TAG) -f ./Dockerfile-wrapperserver "$(PORCHDIR)"

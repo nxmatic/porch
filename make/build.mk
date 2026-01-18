@@ -57,10 +57,10 @@ build-images:
 
 .PHONY: push-images
 push-images:
-	docker buildx build --push --tag $(IMAGE_REPO)/$(PORCH_SERVER_IMAGE):$(IMAGE_TAG) -f ./build/Dockerfile "$(PORCHDIR)"
-	IMAGE_NAME="$(PORCH_CONTROLLERS_IMAGE)" make -C controllers/ push-image
-	IMAGE_NAME="$(PORCH_FUNCTION_RUNNER_IMAGE)" WRAPPER_SERVER_IMAGE_NAME="$(PORCH_WRAPPER_SERVER_IMAGE)" make -C func/ push-image
-	IMAGE_NAME="$(TEST_GIT_SERVER_IMAGE)" make -C test/ push-image
+	docker buildx build $(if $(PLATFORMS),--platform $(PLATFORMS),) --push --tag $(IMAGE_REPO)/$(PORCH_SERVER_IMAGE):$(IMAGE_TAG) -f ./build/Dockerfile "$(PORCHDIR)"
+	IMAGE_NAME="$(PORCH_CONTROLLERS_IMAGE)" PLATFORMS="$(PLATFORMS)" make -C controllers/ push-image
+	IMAGE_NAME="$(PORCH_FUNCTION_RUNNER_IMAGE)" WRAPPER_SERVER_IMAGE_NAME="$(PORCH_WRAPPER_SERVER_IMAGE)" PLATFORMS="$(PLATFORMS)" make -C func/ push-image
+	IMAGE_NAME="$(TEST_GIT_SERVER_IMAGE)" PLATFORMS="$(PLATFORMS)" make -C test/ push-image
 
 .PHONY: dev-server
 dev-server:
